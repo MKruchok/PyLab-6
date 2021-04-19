@@ -1,12 +1,8 @@
-from flask import Flask
-from flask import request
-from flask import jsonify
-from flask import abort
+from flask import Flask, abort, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
+from marshmallow import fields
 import json
-import copy
-
 
 with open("classified.json") as f:
     PASS = json.load(f)
@@ -23,7 +19,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 sqla_db = SQLAlchemy(app)
 marshmallow = Marshmallow(app)
-
 
 class WritingItem(sqla_db.Model):
     id = sqla_db.Column(sqla_db.Integer, primary_key=True)
@@ -46,8 +41,13 @@ class WritingItem(sqla_db.Model):
 
 
 class WritingItemSchema(marshmallow.Schema):
-    class Meta:
-        fields = ('name', 'write_item_type', 'customer_type', 'weight', 'price', 'ink_type', 'rating')
+    name = fields.String()
+    write_item_type = fields.String()
+    customer_type = fields.String()
+    weight = fields.Integer()
+    price = fields.Float()
+    ink_type = fields.String()
+    rating = fields.Float()
 
 
 writing_item_schema = WritingItemSchema()
@@ -56,14 +56,8 @@ writing_items_schema = WritingItemSchema(many=True)
 
 @app.route("/writingitem", methods=["POST"])
 def add_writing_item():
-    name = request.json['name']
-    write_item_type = request.json['write_item_type']
-    customer_type = request.json['customer_type']
-    weight = request.json['weight']
-    price = request.json['price']
-    ink_type = request.json['ink_type']
-    rating = request.json['rating']
-    new_writing_item = WritingItem(name, write_item_type, customer_type, weight, price, ink_type, rating)
+    params = writing_item_schema.load(request.json)
+    new_writing_item = WritingItem(**params)
     sqla_db.session.add(new_writing_item)
     sqla_db.session.commit()
     return writing_item_schema.jsonify(new_writing_item)
@@ -89,16 +83,10 @@ def writing_item_update(id):
     writing_item = WritingItem.query.get(id)
     if not writing_item:
         abort(404)
-    old_writing_item = copy.deepcopy(writing_item)
-    writing_item.name = request.json['name']
-    writing_item.write_item_type = request.json['write_item_type']
-    writing_item.customer_type = request.json['customer_type']
-    writing_item.weight = request.json['weight']
-    writing_item.price = request.json['price']
-    writing_item.ink_type = request.json['ink_type']
-    writing_item.rating = request.json['rating']
+    new_params = writing_item_schema.load(request.json)
+    for param in new_params:
+        setattr(writing_item, param, request.json[param])
     sqla_db.session.commit()
-    return writing_items_schema.jsonify(writing_item)
 
 
 @app.route("/writingitem/<id>", methods=["DELETE"])
